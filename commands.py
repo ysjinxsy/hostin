@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 
 intents = nextcord.Intents.all()
-guild_id = 1273388243626496033
+guild_id = 1266153230300090450
 client = commands.Bot(command_prefix="?", intents=intents)
 DATABASE_PATH = "database.db"
 async def ensure_config_exists(guild_id):
@@ -693,88 +693,5 @@ async def send_ticket_panel(channel):
     await channel.send(embed=embed, view=view)
 
 
-DATABASE_PATH = "database.db"
-FOOTBALL_API_URL = "https://api.football-data.org/v2/teams"
-API_HEADERS = {"X-Auth-Token": "4f530e1ac0774de18944ff40ed943def"}  # Replace with your API token
 
 
-team_to_emoji = {
-    "manchester city": "manchester_city_emoji",
-    "manchester united": "manchester_united_emoji",
-    "chelsea": "chelsea_emoji",
-    "liverpool": "liverpool_emoji",
-    # Add more teams and their corresponding custom emoji names
-}
-
-async def get_teams_from_api():
-    response = requests.get(FOOTBALL_API_URL, headers=API_HEADERS)
-    if response.status_code == 200:
-        teams = response.json()["teams"]
-        return [(team["name"], team["id"]) for team in teams]
-    else:
-        print(f"Failed to fetch teams: {response.status_code}")
-        return []
-
-async def get_emoji_for_team(guild, team_name):
-    team_name_lower = team_name.lower()
-    if team_name_lower in team_to_emoji:
-        emoji_name = team_to_emoji[team_name_lower]
-        emoji = nextcord.utils.get(guild.emojis, name=emoji_name)
-        if emoji:
-            return str(emoji)
-    return "❓"
-
-async def add_team_to_db(server_id, role_id, emoji):
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.cursor() as cursor:
-            await cursor.execute(
-                "INSERT INTO teams (server_id, roleid, emoji) VALUES (?, ?, ?)",
-                (server_id, role_id, emoji)
-            )
-        await db.commit()
-
-@client.slash_command(name="autoadd_team", guild_ids=[guild_id])
-async def autoadd_team(interaction: nextcord.Interaction, count: int = 5):
-    guild = interaction.guild
-
-    teams = await get_teams_from_api()
-    if not teams:
-        await interaction.response.send_message("Failed to fetch teams from API.", ephemeral=True)
-        return
-
-    selected_teams = teams[:count]
-    description = ""
-
-    for team_name, team_id in selected_teams:
-        # Create role for the team
-        role = await guild.create_role(name=team_name)
-        # Fetch corresponding emoji
-        emoji = await get_emoji_for_team(guild, team_name)
-        description += f"{emoji} {team_name}\n"
-        # Add team, role ID, and emoji to the database
-        await add_team_to_db(guild.id, role.id, emoji)
-
-    embed = nextcord.Embed(title="Auto-Added Football Teams", description=description, color=0x00ff00)
-    await interaction.response.send_message(embed=embed)
-
-async def check_table_exists():
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.cursor() as cursor:
-            await cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='teams'")
-            table = await cursor.fetchone()
-            return table is not None
-
-async def create_teams_table():
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.cursor() as cursor:
-            await cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS teams (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    server_id TEXT NOT NULL,
-                    roleid INTEGER NOT NULL,
-                    emoji TEXT NOT NULL
-                )
-                """
-            )
-        await db.commit()
